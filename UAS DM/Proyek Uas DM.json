@@ -1,0 +1,64 @@
+import pandas as pd
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import ast
+import streamlit as st
+
+# Langkah 1: Memuat dataset
+file_path = "C:/Users/febri/OneDrive/Documents/Uas STKI/tmdb_5000_movies.csv"
+movies = pd.read_csv(file_path)
+
+# Langkah 2: Memilih kolom yang relevan
+movies = movies[['title', 'overview', 'genres']]  # Menambahkan kolom genres
+movies = movies.dropna()  # Menghapus data kosong
+
+# Langkah 3: Pra-pemrosesan Genres
+def extract_genres(genres_str):
+    genres_list = ast.literal_eval(genres_str)
+    return ' '.join([genre['name'] for genre in genres_list])
+
+movies['genres'] = movies['genres'].apply(extract_genres)
+
+# Langkah 4: Kombinasi Overview dan Genres
+movies['content'] = movies['overview'] + ' ' + movies['genres']
+
+# Langkah 5: Representasi Teks
+count_vectorizer = CountVectorizer(stop_words='english')
+count_matrix = count_vectorizer.fit_transform(movies['content'])
+
+# Langkah 6: Menghitung Kemiripan Kosinus
+cosine_sim = cosine_similarity(count_matrix, count_matrix)
+
+# Langkah 7: Fungsi untuk Rekomendasi
+def recommend(title, cosine_sim=cosine_sim):
+    # Mendapatkan indeks film berdasarkan judul
+    idx = movies[movies['title'] == title].index[0]
+    
+    # Mendapatkan skor kemiripan untuk film tersebut
+    sim_scores = list(enumerate(cosine_sim[idx]))
+    
+    # Mengurutkan film berdasarkan skor kemiripan
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    
+    # Mendapatkan 10 film teratas (selain film itu sendiri)
+    sim_scores = sim_scores[1:11]
+    
+    # Mendapatkan indeks film yang mirip
+    movie_indices = [i[0] for i in sim_scores]
+    
+    # Mengembalikan judul film yang mirip
+    return movies[['title', 'genres']].iloc[movie_indices]
+
+# Streamlit UI
+st.title("Sistem Rekomendasi Film Berbasis Review")
+
+# Input judul film
+title = st.text_input("Masukkan judul film:")
+
+if title:
+    try:
+        rekomendasi = recommend(title)
+        st.write(f"Rekomendasi film untuk '{title}':")
+        st.dataframe(rekomendasi)
+    except IndexError:
+        st.error("Film tidak ditemukan dalam dataset. Pastikan judul yang dimasukkan benar.")
